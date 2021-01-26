@@ -25,15 +25,15 @@ export const routesConfig: RouteConfigDeclaration[] = [
         component: App,
         routes: [
             {
+                path: '/bimface',
+                isDynamic: true,
+                component: Bimface
+            },
+            {
                 path: '/cesium',
                 // exact: true,
                 isDynamic: true,
                 component: Cesium,
-            },
-            {
-                path: '/bimface',
-                isDynamic: true,
-                component: Bimface
             }
         ],
     },
