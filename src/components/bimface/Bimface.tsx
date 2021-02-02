@@ -9,7 +9,6 @@ import * as utils from "@src/utils";
 import { Button, DatePicker, Drawer, Form, message, Space } from 'antd';
 import {
   AimOutlined,
-  ApartmentOutlined,
   BankOutlined,
   BgColorsOutlined,
   BorderBottomOutlined,
@@ -20,6 +19,7 @@ import {
   FormOutlined,
   HighlightOutlined,
   LockOutlined,
+  LogoutOutlined,
   MenuUnfoldOutlined,
   PlayCircleOutlined,
   PlusOutlined,
@@ -27,7 +27,6 @@ import {
   RightOutlined,
   SendOutlined,
   SlidersOutlined,
-  SwapOutlined,
   UndoOutlined,
   VideoCameraAddOutlined,
   VideoCameraOutlined,
@@ -54,7 +53,7 @@ export default class BimfaceMap extends React.Component<any> {
   static contextType = GlobalContext;
   constructor(props, context) {
     super(props, context);
-    // bind
+    // bind  event-require
     this.addMemberPoint = this.addMemberPoint.bind(this);
     // state
     this.state = {
@@ -86,13 +85,12 @@ export default class BimfaceMap extends React.Component<any> {
       cameraStatus: "",                                   // 拍照相机参数
       points: [],                                         // 漫游定点
       pointsContainer: "",                                // 漫游定点标签容器
-      pathAnimation: "",                                   // 漫游动画
-      pausePathAnimation: false,                           // 漫游动画是否暂停
+      pathAnimation: "",                                  // 漫游动画
+      pausePathAnimation: false,                          // 漫游动画是否暂停
       app: "",                                            // 主组件
       viewer: "",                                         // 视图组件
       viewToken: "b8f2aba8446f47e08388c712df12b16e",      // 模型token 12小时
       // viewToken: "f98247cff86e4cf686b796d2ec1fe952",   // 图纸token 12小时
-      // viewToken: "fbe21adbb9e249289a1d5e35e3538b92",   // 示例token 永久
       construct: ["地坪", "F1", "F2", "F3", "ROOF"],      // 解构列表
       statusList: "",                                     // 状态列表
     }
@@ -149,29 +147,21 @@ export default class BimfaceMap extends React.Component<any> {
   // 设置事件
   setEvent() {
     let { viewer } = this.state;
-    // 点击获取相邻轴网
+    // 左键保存位置信息
     viewer.addEventListener("MouseClicked", (e) => {
-      const { viewer } = this.state;
-      if (e.objectId) {
-        viewer.getComponentProperty([e.objectId], data => { //获取构件属性
-          console.log("构件属性：", data)
-        })
-        viewer.getFloors(data => { //获取楼层信息
-          console.log("楼层信息：", data)
-        })
-        viewer.getNearestAxisGrids(e.worldPosition, "", data => { //获取构件相邻轴网
-          // console.log(`${data[0].name}-${data[1].name}`)
-        })
-        // viewer.clearSelectedComponents();// 取消选中状态
+      if (e.objectId)
         this.setState({ targetPosition: e.worldPosition })
-      }
-      else {
-        viewer.getModelTree(data => { //获取目录信息
-          console.log("目录信息：", data)
-        })
-        viewer.getNestedComponents(data => {//获取构件嵌套关系表
-          console.log("嵌套关系：", data)
-        })
+    })
+    // 右键获取解构信息
+    viewer.addEventListener("ContextMenu", e => {
+      if (e.objectId) {
+        viewer.getComponentProperty([e.objectId], data => console.log("构件属性：", data))
+        viewer.getFloors(data => console.log("楼层信息：", data))
+        viewer.getNearestAxisGrids(e.worldPosition, "", data => console.log(`${data[0].name}-${data[1].name}`))
+        viewer.clearSelectedComponents();// 取消选中状态
+      } else {
+        viewer.getModelTree(data => console.log("目录信息：", data))
+        viewer.getNestedComponents(data => console.log("嵌套关系：", data))
       }
     })
   }
@@ -726,6 +716,13 @@ export default class BimfaceMap extends React.Component<any> {
     this.setState(prev => { return { isHover: !prev.isHover } })
   }
 
+  // 跳转Gis页
+  toGis() {
+    this.props.history.push({
+      pathname: "'/bimfaceGis",
+      query: { from: "Bimface" }
+    })
+  }
 
   render() {
     return (
@@ -738,6 +735,9 @@ export default class BimfaceMap extends React.Component<any> {
           </Button>
           <Button type="dash" size="small" onClick={this.hoverUI.bind(this)}>
             <BorderBottomOutlined />
+          </Button>
+          <Button type="dash" size="small" onClick={this.toGis.bind(this)}>
+            <LogoutOutlined />
           </Button>
         </div>
         {/* 主图 */}

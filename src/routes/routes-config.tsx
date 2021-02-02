@@ -4,6 +4,7 @@ import App from '@src/entry/App';
 // list
 import Cesium from '@src/components/cesium/Cesium'
 import Bimface from '@src/components/bimface/Bimface'
+import BimfaceGis from '@src/components/bimface/BimfaceGis'
 
 // 路由结构
 export interface RouteConfigDeclaration {
@@ -28,6 +29,11 @@ export const routesConfig: RouteConfigDeclaration[] = [
                 path: '/bimface',
                 isDynamic: true,
                 component: Bimface
+            },
+            {
+                path: '/bimfaceGis',
+                isDynamic: true,
+                component: BimfaceGis
             },
             {
                 path: '/cesium',
