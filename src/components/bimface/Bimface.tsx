@@ -8,11 +8,14 @@ import * as utils from "@src/utils";
 //antd
 import { Button, DatePicker, Drawer, Form, message, Space } from 'antd';
 import {
+  AimOutlined,
+  ApartmentOutlined,
   BankOutlined,
   BgColorsOutlined,
   BorderBottomOutlined,
   BulbOutlined,
   CarOutlined,
+  EditOutlined,
   EnvironmentOutlined,
   FormOutlined,
   HighlightOutlined,
@@ -23,7 +26,11 @@ import {
   RedoOutlined,
   RightOutlined,
   SendOutlined,
+  SlidersOutlined,
   SwapOutlined,
+  UndoOutlined,
+  VideoCameraAddOutlined,
+  VideoCameraOutlined,
 } from '@ant-design/icons';
 
 
@@ -47,6 +54,9 @@ export default class BimfaceMap extends React.Component<any> {
   static contextType = GlobalContext;
   constructor(props, context) {
     super(props, context);
+    // bind
+    this.addMemberPoint = this.addMemberPoint.bind(this);
+    // state
     this.state = {
       isModal: true,                                      // 模型(rvt) / 图纸(dwg)
       drawerShow: true,                                   // 抽屉显示 
@@ -56,9 +66,12 @@ export default class BimfaceMap extends React.Component<any> {
       isolate: "",                                        // 解构
       isZoom: false,                                      // 是否定位
       isColor: false,                                     // 是否着色
+      isColorLine: false,                                 // 是否着色轮廓
+      isColorWindow: false,                               // 是否着色轮廓
       isLockDegree: false,                                // 是否锁角
       isBlink: false,                                     // 是否闪烁
       isRotate: false,                                    // 是否自动旋转
+      isHover: false,                                     // 是否开启停留效果
       walkThrough: "",                                    // 漫游
       walkList: [],                                       // 漫游关键点列表
       drawContainer: "",                                  // 2D标签容器
@@ -69,12 +82,19 @@ export default class BimfaceMap extends React.Component<any> {
       exMemberId: "",                                     // 外部构件Id
       exMemberMng: "",                                    // 外部构件容器
       TDSLoader: false,                                   // TDSLoader是否引入
+      targetPosition: "",                                 // 选中构件坐标
+      cameraStatus: "",                                   // 拍照相机参数
+      points: [],                                         // 漫游定点
+      pointsContainer: "",                                // 漫游定点标签容器
+      pathAnimation: "",                                   // 漫游动画
+      pausePathAnimation: false,                           // 漫游动画是否暂停
       app: "",                                            // 主组件
       viewer: "",                                         // 视图组件
-      viewToken: "a9729bce3aac462dbcd570371beaa02f",      // 模型token 12小时
+      viewToken: "b8f2aba8446f47e08388c712df12b16e",      // 模型token 12小时
       // viewToken: "f98247cff86e4cf686b796d2ec1fe952",   // 图纸token 12小时
       // viewToken: "fbe21adbb9e249289a1d5e35e3538b92",   // 示例token 永久
-      construct: ["地坪", "F1", "F2", "F3", "ROOF"],      //解构列表
+      construct: ["地坪", "F1", "F2", "F3", "ROOF"],      // 解构列表
+      statusList: "",                                     // 状态列表
     }
   }
 
@@ -82,6 +102,7 @@ export default class BimfaceMap extends React.Component<any> {
     this.initeBimface();
   }
 
+  // 初始化
   initeBimface(viewToken = this.state.viewToken) {
     const { isModal } = this.state;
     // 根据viewToken指定待显示的模型或图纸
@@ -102,11 +123,58 @@ export default class BimfaceMap extends React.Component<any> {
       //获取viewer3D对象
       let viewer = app.getViewer();
       //设置视角
-      this.setState({ app, viewer }, _ => this.setCamera())
+      this.setState({ app, viewer }, () => {
+        this.setEvent();
+      })
     }, e => console.log("failure_load:", e));
   }
 
-  setCamera() { }
+  // 设置视角
+  setCamera(status) {
+    let { viewer, cameraStatus } = this.state;
+    if (status)
+      viewer.setCameraStatus(status)
+    else if (cameraStatus)
+      viewer.setCameraStatus(cameraStatus)
+    else
+      viewer.setView(Glodon.Bimface.Viewer.ViewOption.Home);
+    viewer.render();
+  }
+  // 保存视角
+  getCamera() {
+    let { viewer } = this.state;
+    this.setState({ cameraStatus: viewer.getCameraStatus() })
+  }
+
+  // 设置事件
+  setEvent() {
+    let { viewer } = this.state;
+    // 点击获取相邻轴网
+    viewer.addEventListener("MouseClicked", (e) => {
+      const { viewer } = this.state;
+      if (e.objectId) {
+        viewer.getComponentProperty([e.objectId], data => { //获取构件属性
+          console.log("构件属性：", data)
+        })
+        viewer.getFloors(data => { //获取楼层信息
+          console.log("楼层信息：", data)
+        })
+        viewer.getNearestAxisGrids(e.worldPosition, "", data => { //获取构件相邻轴网
+          // console.log(`${data[0].name}-${data[1].name}`)
+        })
+        // viewer.clearSelectedComponents();// 取消选中状态
+        this.setState({ targetPosition: e.worldPosition })
+      }
+      else {
+        viewer.getModelTree(data => { //获取目录信息
+          console.log("目录信息：", data)
+        })
+        viewer.getNestedComponents(data => {//获取构件嵌套关系表
+          console.log("嵌套关系：", data)
+        })
+      }
+    })
+  }
 
 
   /*
@@ -241,8 +309,8 @@ export default class BimfaceMap extends React.Component<any> {
 
   // 着色
   colorTo() {
-    const { viewer } = this.state;
-    if (this.state.isColor) {
+    const { viewer, isColor } = this.state;
+    if (isColor) {
       viewer.clearOverrideColorComponents();
       viewer.render();
       this.setState({ isColor: false })
@@ -252,6 +320,37 @@ export default class BimfaceMap extends React.Component<any> {
     viewer.overrideComponentsColorById(["389601"], color);
     viewer.render();
     this.setState({ isColor: true })
+  }
+  // 轮廓着色
+  colorLine() {
+    const color = new Glodon.Web.Graphics.Color(99, 188, 168, .8)
+    const { viewer, isColorLine } = this.state;
+    isColorLine
+      ? viewer.restoreWireframeColor()
+      : viewer.setWireframeColor(color);
+    // 特定
+    // let ids =  ["267327", "268067", "271431", "272632", "276388"]
+    // isColorLine
+    //   ? viewer.restoreComponentsFrameColorById(ids)
+    //   : viewer.overrideComponentsFrameColorById(ids,color)
+    viewer.render();
+    this.setState(prev => { return { isColorLine: !prev.isColorLine } })
+  }
+  // 窗户着色
+  colorWindow() {
+    const { viewer, isColorWindow } = this.state;
+    const color = new Glodon.Web.Graphics.Color(0, 255, 0, 1);
+    const frames = [
+      { family: "window 3" },
+      { family: "双扇推拉门5" },
+      { family: "四扇推拉门 2" },
+      { family: "固定" },
+    ];
+    isColorWindow
+      ? viewer.restoreComponentsFrameColorByObjectData(frames)
+      : viewer.overrideComponentsFrameColorByObjectData(frames, color);
+    viewer.render();
+    this.setState(prev => { return { isColorWindow: !prev.isColorWindow } })
   }
 
   // 锁角
@@ -299,16 +398,18 @@ export default class BimfaceMap extends React.Component<any> {
     }
   }
 
-  // 旋转
+  // 自动旋转
   autoRotate(step: Number) {
-    const { viewer } = this.state;
+    const { viewer, targetPosition } = this.state;
     if (this.state.isRotate) {
       viewer.stopAutoRotate();
       viewer.render();
-      this.setState({ isRotate: false })
+      this.setState({ isRotate: false, targetPosition: "" })
       return
     }
-    viewer.startAutoRotate(step);
+    targetPosition
+      ? viewer.startAutoRotate(step, targetPosition)
+      : viewer.startAutoRotate(step)
     this.setState({ isRotate: true })
   }
 
@@ -443,6 +544,7 @@ export default class BimfaceMap extends React.Component<any> {
       // 切换外部构件
       if (this.state.exMemberId) {
         this.state.exMemberMng.removeById(this.state.exMemberId);
+        console.log(this.state.pathAnimation)
         this.setState({ exMemberId: "" })
       } else this.loadMember(url, "vehicle")
     } else {  // 加载TDSLoader
@@ -453,9 +555,10 @@ export default class BimfaceMap extends React.Component<any> {
   // 添加构件
   loadMember(url: String, name: String) {
     let exMemberMng, exMemberId;
-    let { viewer } = this.state;
+    let { viewer, spline } = this.state;
     // 构造3DS加载器
     let loader = new THREE.TDSLoader;
+    if (spline) this.setState({ spline: "" })
     loader.load(url, member => {
       // 添加为外部构件
       exMemberMng = new Glodon.Bimface.Viewer.ExternalObjectManager(viewer);
@@ -465,30 +568,83 @@ export default class BimfaceMap extends React.Component<any> {
       // 放置
       exMemberMng.translate(exMemberId, { x: -7500, y: -15000, z: -450 })
       viewer.render();
-      this.setState({ exMemberMng, exMemberId })
+      this.setState({
+        exMemberMng,
+        exMemberId,
+        pathAnimation: "",
+        pausePathAnimation: false,
+        points: [],
+        spline: ""
+      })
     })
   }
-  // 旋转构件
-  rotateMember(angle: Number) {
-    if (!this.state.exMemberId) return message.warning("请先添加外部构件！")
-    let { exMemberId, exMemberMng } = this.state;
-    exMemberMng.rotateZ(exMemberId, angle)
+  // 开始漫游埋点
+  async startMemberPoints() {
+    const { viewer, pathAnimation, exMemberMng, exMemberId } = this.state;
+    if (pathAnimation) {
+      pathAnimation.stop();
+      await this.setState({ pathAnimation: "", points: [], spline: "" })
+    }
+    this.drawMemberPoint(exMemberMng.getPosition([exMemberId]))
+    viewer.addEventListener("MouseClicked", this.addMemberPoint)
   }
-  // 旋转构件
-  goMember(step: Number) {
-    if (!this.state.exMemberId) return message.warning("请先添加外部构件！")
-    let { exMemberId, exMemberMng } = this.state;
-    exMemberMng.offsetY(exMemberId, step)
+  // 增加漫游埋点
+  addMemberPoint(e) {
+    const { viewer } = this.state;
+    viewer.clearSelectedComponents();
+    if (e.worldPosition) {
+      this.drawMemberPoint(e.worldPosition)
+    } else message.warning("请在模型范围内取点！")
   }
-  // 构件漫游
+  // 标记漫游埋点
+  drawMemberPoint(point: Object) {
+    const { viewer, points } = this.state;
+    points.push(point)
+    // 标签
+    let config = new Glodon.Bimface.Plugins.Drawable.CustomItemConfig();
+    config.offsetX = -3;
+    config.offsetY = -3;
+    config.opacity = 0.8;
+    let circle = document.createElement('div');
+    circle.style.width = '6px';
+    circle.style.height = '6px';
+    circle.style.border = 'solid';
+    circle.style.borderColor = '#FFFFFF';
+    circle.style.borderWidth = '1px';
+    circle.style.background = '#FFFF00';
+    circle.style.borderRadius = '50%';
+    config.content = circle;
+    config.draggable = false;
+    config.viewer = viewer;
+    config.worldPosition = point;
+    let customItem = new Glodon.Bimface.Plugins.Drawable.CustomItem(config);
+    // 标签容器
+    let pointsConfig = new Glodon.Bimface.Plugins.Drawable.DrawableContainerConfig();
+    pointsConfig.viewer = viewer;
+    let pointsContainer = new Glodon.Bimface.Plugins.Drawable.DrawableContainer(pointsConfig);
+    pointsContainer.addItem(customItem);
+    this.setState({ points, pointsContainer })
+  }
+  // 漫游构件
   walkMember() {
-    if (!this.state.exMemberId) return message.warning("请先添加外部构件！")
+    const { exMemberId, points, pausePathAnimation } = this.state;
+    if (!exMemberId)
+      return message.warning("请先添加外部构件！")
+    if (points.length < 2)
+      return message.warning("请先添加漫游节点！")
+    if (this.state.pathAnimation) {
+      pausePathAnimation
+        ? this.state.pathAnimation.play()
+        : this.state.pathAnimation.pause()
+      this.setState(prev => { return { pausePathAnimation: !prev.pausePathAnimation } })
+      return
+    }
     let { exMemberMng, viewer } = this.state;
-    if (this.state.pathAnimation) this.state.pathAnimation.stop()
     // 动画
+    let curve = this.getSplineCurve();
     let config = new Glodon.Bimface.Plugins.Animation.PathAnimationConfig();
     config.viewer = viewer;
-    config.path = this.createCurve();
+    config.path = curve;
     config.time = 3000;
     config.loop = true;
     config.objectNames = [exMemberMng.getObjectIdByName("vehicle")];
@@ -499,36 +655,76 @@ export default class BimfaceMap extends React.Component<any> {
     pathAnimation.play();
     this.setState({ pathAnimation })
   }
-  // 切换构件漫游动画播放
-  toggleWalkMember() {
-    if (!this.state.pathAnimation) return message.warning("请先开启漫游！")
-    let { pathAnimation, exMemberId, exMemberMng } = this.state;
-    // 获取车辆位置
-    console.log(exMemberMng.getPosition([exMemberId]))
-    // 切换动画播放
-    this.state.stopPathAnimation
-      ? pathAnimation.play()
-      : pathAnimation.pause()
-    this.setState(prev => { return { stopPathAnimation: !prev.stopPathAnimation } })
+  // 获取漫游路径曲线
+  getSplineCurve() {
+    // return new THREE.CatmullRomCurve3([new THREE.Vector3(-7500, -15000, -450)])
+    const { points, viewer, pointsContainer } = this.state;
+    // 清除埋点
+    viewer.removeEventListener("MouseClicked", this.getPoint)
+    viewer.render();
+    pointsContainer.clear();
+    // 绘制曲线
+    let spline = new Glodon.Bimface.Plugins.Geometry.SplineCurve(points);
+    this.setState({ spline })
+    return spline
   }
-  // 创建漫游路径
-  createCurve() {
-    let list = [new THREE.Vector3(-7500, -15000, -450)]
-    let origin = { x: -7500, y: -15000, z: -450 };
-    for (let i = 0; i < Math.floor(Math.random() * 3 + 3); i++)
-      list.push(
-        new THREE.Vector3(
-          Math.ceil(Math.random() * 1.2 * origin.x),
-          Math.ceil(Math.random() * 1.2 * origin.y),
-          Math.ceil(Math.random() * 1.2 * origin.z))
-      )
-    list.push(new THREE.Vector3(-7500, -15000, -450))
-    console.log(list)
-    return new THREE.CatmullRomCurve3(list)
+  // 旋转构件
+  rotateMember(angle: Number) {
+    const { exMemberId, exMemberMng, pathAnimation, pausePathAnimation } = this.state;
+    if (!this.state.exMemberId) return message.warning("请先添加外部构件！")
+    if (pathAnimation && !pausePathAnimation) return
+    exMemberMng.rotateZ(exMemberId, angle)
+  }
+  // 旋转构件
+  goMember(step: Number) {
+    const { exMemberId, exMemberMng, pathAnimation, pausePathAnimation } = this.state;
+    if (!exMemberId) return message.warning("请先添加外部构件！")
+    if (pathAnimation && !pausePathAnimation) return
+    exMemberMng.offsetY(exMemberId, step)
+  }
+  // 编辑构件
+  editMember() {
+    const { exMemberId, viewer, pathAnimation, pausePathAnimation } = this.state;
+    if (!exMemberId) return message.warning("请先添加外部构件！")
+    if (pathAnimation && !pausePathAnimation) return
+    // 外部构件编辑器配置
+    let config = new Glodon.Bimface.Plugins.ExternalObject.ExternalObjectEditorToolbarConfig();
+    config.viewer = viewer;
+    config.id = exMemberId;
+    let editor = new Glodon.Bimface.Plugins.ExternalObject.ExternalObjectEditorToolbar(config);
+    editor.show();
+  }
+
+
+  /*
+  * 状态相关
+  */
+  // 获取状态列表
+  getStatusList(index) {
+    const { viewer } = this.state;
+    viewer.get3DViewStates(data => {
+      console.log(data)
+      viewer.setState(data.views[index].state);
+      viewer.render();
+      this.setState({ statusList: data.views })
+    })
+  }
+  // 切换状态
+  toggleStatus(index) {
+    const { viewer, statusList } = this.state;
+    if (!statusList) return this.getStatusList(index)
+    viewer.setState(statusList[index].state);
+    viewer.render();
   }
 
   // 隐藏默认UI
-  hideUI() {}
+  hoverUI() {
+    let { viewer, isHover } = this.state;
+    isHover
+      ? viewer.disableMouseHoverHighlight()
+      : viewer.enableMouseHoverHighlight()
+    this.setState(prev => { return { isHover: !prev.isHover } })
+  }
 
 
   render() {
@@ -537,12 +733,10 @@ export default class BimfaceMap extends React.Component<any> {
         {/* 展示项 */}
         <div className={styles.factor}>
           <DatePicker size="small" />
-          <Button type="primary"
-            size="small"
-            onClick={_ => this.setState(prev => { return { drawerShow: !prev.drawerShow } })}>
+          <Button type="primary" size="small" onClick={_ => this.setState(prev => { return { drawerShow: !prev.drawerShow } })}>
             <MenuUnfoldOutlined />
           </Button>
-          <Button type="dash" size="small" onClick={this.hideUI.bind(this)}>
+          <Button type="dash" size="small" onClick={this.hoverUI.bind(this)}>
             <BorderBottomOutlined />
           </Button>
         </div>
@@ -577,11 +771,27 @@ export default class BimfaceMap extends React.Component<any> {
                   <span>F1窗体</span>
                   <EnvironmentOutlined />
                 </Button>
+                <Button type={this.state.cameraStatus ? "primary" : "dash"} size="small" onClick={this.getCamera.bind(this)}>
+                  <span>拍照</span>
+                  <VideoCameraAddOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.setCamera.bind(this, '')}>
+                  <span>回档</span>
+                  <VideoCameraOutlined />
+                </Button>
               </Form.Item>
               {/* 着色 */}
               <Form.Item label="着色">
                 <Button type={this.state.isColor ? "primary" : "dash"} size="small" onClick={this.colorTo.bind(this)}>
                   <span>F1墙体</span>
+                  <BgColorsOutlined />
+                </Button>
+                <Button type={this.state.isColorLine ? "primary" : "dash"} size="small" onClick={this.colorLine.bind(this)}>
+                  <span>轮廓</span>
+                  <BgColorsOutlined />
+                </Button>
+                <Button type={this.state.isColorWindow ? "primary" : "dash"} size="small" onClick={this.colorWindow.bind(this)}>
+                  <span>窗体</span>
                   <BgColorsOutlined />
                 </Button>
               </Form.Item>
@@ -603,11 +813,11 @@ export default class BimfaceMap extends React.Component<any> {
               <Form.Item label="自动旋转">
                 <Button type="dash" size="small" onClick={this.autoRotate.bind(this, 2)}>
                   <span>顺时针</span>
-                  <BgColorsOutlined />
+                  <RedoOutlined />
                 </Button>
                 <Button type="dash" size="small" onClick={this.autoRotate.bind(this, -2)}>
                   <span>逆时针</span>
-                  <BgColorsOutlined />
+                  <UndoOutlined />
                 </Button>
               </Form.Item>
               {/* 状态 */}
@@ -684,6 +894,14 @@ export default class BimfaceMap extends React.Component<any> {
                   <span>增加</span>
                   <PlusOutlined />
                 </Button>
+                <Button type="dash" size="small" onClick={this.startMemberPoints.bind(this)}>
+                  <span>定点</span>
+                  <AimOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.walkMember.bind(this)}>
+                  <span>漫游</span>
+                  <CarOutlined />
+                </Button>
                 <Button type="dash" size="small" onClick={this.rotateMember.bind(this, Math.PI / 6)}>
                   <span>旋转</span>
                   <RedoOutlined />
@@ -692,13 +910,23 @@ export default class BimfaceMap extends React.Component<any> {
                   <span>前进</span>
                   <RightOutlined />
                 </Button>
-                <Button type="dash" size="small" onClick={this.walkMember.bind(this)}>
-                  <span>漫游</span>
-                  <CarOutlined />
+                <Button type="dash" size="small" onClick={this.editMember.bind(this)}>
+                  <span>编辑</span>
+                  <EditOutlined />
                 </Button>
-                <Button type={this.state.pathAnimation ? "primary" : "dash"} size="small" onClick={this.toggleWalkMember.bind(this)}>
-                  <span>{this.state.stopPathAnimation ? "播放" : "暂停"}</span>
-                  <SwapOutlined />
+              </Form.Item>
+              <Form.Item label="状态">
+                <Button type="dash" size="small" onClick={this.toggleStatus.bind(this, 0)}>
+                  <span>标准</span>
+                  <SlidersOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.toggleStatus.bind(this, 1)}>
+                  <span>骨架</span>
+                  <SlidersOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.toggleStatus.bind(this, 2)}>
+                  <span>粉嫩</span>
+                  <SlidersOutlined />
                 </Button>
               </Form.Item>
             </Form>
