@@ -719,7 +719,7 @@ export default class BimfaceMap extends React.Component<any> {
   // 跳转Gis页
   toGis() {
     this.props.history.push({
-      pathname: "'/bimfaceGis",
+      pathname: "/bimfaceGis",
       query: { from: "Bimface" }
     })
   }
