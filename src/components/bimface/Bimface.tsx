@@ -14,9 +14,11 @@ import {
   BorderBottomOutlined,
   BulbOutlined,
   CarOutlined,
+  CodepenCircleOutlined,
   EditOutlined,
   EnvironmentOutlined,
   FormOutlined,
+  HeatMapOutlined,
   HighlightOutlined,
   LockOutlined,
   LogoutOutlined,
@@ -27,6 +29,7 @@ import {
   RightOutlined,
   SendOutlined,
   SlidersOutlined,
+  StarOutlined,
   UndoOutlined,
   VideoCameraAddOutlined,
   VideoCameraOutlined,
@@ -89,7 +92,7 @@ export default class BimfaceMap extends React.Component<any> {
       pausePathAnimation: false,                          // 漫游动画是否暂停
       app: "",                                            // 主组件
       viewer: "",                                         // 视图组件
-      viewToken: "b8f2aba8446f47e08388c712df12b16e",      // 模型token 12小时
+      viewToken: "9b1f110f213843e6bd576c2e1ed52dc7",      // 模型token 12小时
       // viewToken: "f98247cff86e4cf686b796d2ec1fe952",   // 图纸token 12小时
       construct: ["地坪", "F1", "F2", "F3", "ROOF"],      // 解构列表
       statusList: "",                                     // 状态列表
@@ -113,6 +116,7 @@ export default class BimfaceMap extends React.Component<any> {
         ? new Glodon.Bimface.Application.WebApplication3DConfig()
         : new Glodon.Bimface.Application.WebApplicationDrawingConfig()
       webAppConfig.domElement = document.getElementById('domId');
+      webAppConfig.enableExplosion = true;  //准许爆炸
       //创建 WebApplication3D加载模型
       let app = isModal
         ? new Glodon.Bimface.Application.WebApplication3D(webAppConfig)
@@ -149,6 +153,7 @@ export default class BimfaceMap extends React.Component<any> {
     let { viewer } = this.state;
     // 左键保存位置信息
     viewer.addEventListener("MouseClicked", (e) => {
+      console.log(e)
       if (e.objectId)
         this.setState({ targetPosition: e.worldPosition })
     })
@@ -707,6 +712,165 @@ export default class BimfaceMap extends React.Component<any> {
     viewer.render();
   }
 
+
+  /*
+  * 爆炸
+  */
+  // 楼层爆炸
+  async floorBlast() {
+    const { viewer, isFloorBlast, isFloorSmash } = this.state;
+    if (isFloorSmash) return message.warning("请先恢复粉碎操作！")
+    // 切换标签展示
+    await this.floorLabel();
+    if (!isFloorBlast) {
+      let list
+      viewer.getFloors(item => {
+        if (!item) return
+        list.push(item, id)
+      })
+      viewer.setFloorExplosion(3, list, { x: 1, y: 1, z: 1 })
+    } else
+      viewer.clearFloorExplosion()
+    viewer.render();
+    this.setState(prev => { return { isFloorBlast: !prev.isFloorBlast } })
+  }
+  // 楼层粉碎
+  async floorSmash() {
+    const { viewer, isFloorBlast, isFloorSmash } = this.state;
+    if (isFloorBlast) return message.warning("请先恢复爆炸操作！")
+    // 切换标签展示
+    await this.floorLabel();
+    isFloorSmash
+      ? viewer.setExplosionExtent(0)
+      : viewer.setExplosionExtent(1.0);
+    console.log(this.state.exMemberId, viewer.getModel(this.state.exMemberId));
+    viewer.render();
+    this.setState(prev => { return { isFloorSmash: !prev.isFloorSmash } })
+  }
+  // 楼层标签
+  async floorLabel() {
+    // 初始化
+    if (!this.state.drawContainer) await this.createDrawContainer();
+    const { drawContainer } = this.state;
+    // 清除
+    if (drawContainer.getAllItems().length) return drawContainer.clear();
+    let config;
+    let list = [
+      { name: "屋顶", objectId: "267327", worldPosition: { x: 79.35944699947751, y: -675.47303249697, z: 13244.12563874087 } },
+      { name: "F3层", objectId: "272902", worldPosition: { x: 7328.782369784601, y: -1195.1366797955034, z: 10620.170945884178 } },
+      { name: "F2层", objectId: "306006", worldPosition: { x: 2046.329353459006, y: -6839.283857768076, z: 6310.011740555843 } },
+      { name: "F1层", objectId: "299909", worldPosition: { x: 2662.0360705595804, y: 4339.756861904679, z: 2499.999738210495 } },
+      { name: "地坪", objectId: "307240", worldPosition: { x: -14526.771197830574, y: -8332.43501478758, z: -449.9999788195121 } }
+    ].map(item => {
+      config = new Glodon.Bimface.Plugins.Drawable.LeadLabelConfig();
+      config.text = item.name;
+      config.objectId = item.objectId;
+      config.worldPosition = item.worldPosition;
+      return new Glodon.Bimface.Plugins.Drawable.LeadLabel(config)
+    })
+    console.log(list)
+    drawContainer.addItems(list);
+  }
+
+
+  /*
+  * 效果相关
+  */
+  // 火焰
+  fireEffect() {
+    const { viewer, fireEffect } = this.state;
+    if (fireEffect) {
+      fireEffect.destroy();
+      this.setState({ fireEffect: "" })
+    } else {
+      // 构造火焰效果的配置项
+      var config = new Glodon.Bimface.Plugins.ParticleSystem.FireEffectConfig();
+      config.position = {
+        x: -321.9141089354603,
+        y: -2099.187249302578,
+        z: 12673.691311838113
+      };
+      config.viewer = viewer;
+      // 构造火焰对象
+      let fireEffect = new Glodon.Bimface.Plugins.ParticleSystem.FireEffect(config);
+      this.setState({ fireEffect })
+    }
+  }
+  // 喷水
+  sprayWaterEffect() {
+    const { viewer, isSprayWater } = this.state;
+    if (this.state.sprayWaterEffect) {
+      console.log(this.state.sprayWaterEffect)
+      isSprayWater
+        ? this.state.sprayWaterEffect.stop()
+        : this.state.sprayWaterEffect.play()
+      this.setState(prev => { return { isSprayWater: !prev.isSprayWater } })
+    } else {
+      // 构造喷水效果的配置项
+      let config = new Glodon.Bimface.Plugins.ParticleSystem.SprayWaterEffectConfig();
+      // 配置Viewer对象、颜色、初始位置、初始半径、初始强度、粒子比例等参数
+      config.viewer = viewer;
+      config.color = new Glodon.Web.Graphics.Color(231, 254, 255, 1);
+      // config.originPitch = Math.PI / 6; //初始俯仰值
+      // config.originYaw = Math.PI / 6;   //初始偏航值
+      config.originPosition = {
+        x: -321.9141089354603,
+        y: -2099.187249302578,
+        z: 12673.691311838113
+      };
+      config.originRadius = 60;
+      config.originIntensity = 0.3;
+      config.spread = 1.5;
+      config.scale = 3
+      // 构造喷水效果对象
+      let sprayWaterEffect = new Glodon.Bimface.Plugins.ParticleSystem.SprayWaterEffect(config);
+      sprayWaterEffect.update();
+      this.setState({ sprayWaterEffect, isSprayWater: true })
+    }
+  }
+
+  // 改变天气
+  changeWeather(type: Number) {
+    let config, weather;
+    const { viewer, weatherType } = this.state;
+    if (this.state.weather) {
+      this.state.weather.enableEffect(false);
+      this.setState({ weather: "" })
+    }
+    if (type == weatherType) return
+    switch (type) {
+      case 1: // 暴雪
+        config = new Glodon.Bimface.Plugins.WeatherEffect.SnowConfig();
+        config.viewer = viewer;
+        config.darkness = 0.3;      // 天空的灰暗程度，取值为0-1，默认值为0.5
+        config.density = 2;         // 雪的密度，取值为：雪停:0;小雪:1;中雪:2;大雪:3，默认中雪
+        config.thickness = 0.4;     // 积雪厚度，取值为0~1，默认值为0.8
+        weather = new Glodon.Bimface.Plugins.WeatherEffect.Snow(config);
+        weather.enableEffect(true);
+        break;
+      case 2: // 迷雾
+        config = new Glodon.Bimface.Plugins.WeatherEffect.FogConfig();
+        config.viewer = viewer;
+        config.darkness = 0.5;          // 天空的灰暗程度，取值为0-1，默认值为0.5
+        config.lightAttenuation = 3.0;  // 光线衰减的指数，取值大于零，值越小则场景雾化速度越慢,默认值为3.5
+        config.fogColor = new Glodon.Web.Graphics.Color(255, 255, 255, 0.5);  // 雾的颜色，默认值为白色
+        config.visualDistance = 400000; // 最远可视范围，默认500,000，单位为mm
+        weather = new Glodon.Bimface.Plugins.WeatherEffect.Fog(config);
+        weather.enableEffect(true)
+        break;
+      case 3: // 雨季
+        config = new Glodon.Bimface.Plugins.WeatherEffect.RainConfig();
+        config.viewer = viewer;
+        config.darkness = 0.2;          // 天空的灰暗程度，取值为0-1，默认值为0.5
+        config.density = 1;             // 雨的密度，取值为：雨停:0;小雨:1;中雨:2;大雨:3，默认中雨
+        weather = new Glodon.Bimface.Plugins.WeatherEffect.Rain(config);
+        weather.enableEffect(true);
+        break;
+    }
+    viewer.render();
+    this.setState({ weather, weatherType: type })
+  }
+
   // 隐藏默认UI
   hoverUI() {
     let { viewer, isHover } = this.state;
@@ -927,6 +1091,40 @@ export default class BimfaceMap extends React.Component<any> {
                 <Button type="dash" size="small" onClick={this.toggleStatus.bind(this, 2)}>
                   <span>粉嫩</span>
                   <SlidersOutlined />
+                </Button>
+              </Form.Item>
+              <Form.Item label="解体">
+                <Button type="dash" size="small" onClick={this.floorBlast.bind(this)}>
+                  <span>爆炸</span>
+                  <CodepenCircleOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.floorSmash.bind(this)}>
+                  <span>粉碎</span>
+                  <CodepenCircleOutlined />
+                </Button>
+              </Form.Item>
+              <Form.Item label="效果">
+                <Button type="dash" size="small" onClick={this.fireEffect.bind(this)}>
+                  <span>火焰</span>
+                  <StarOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.sprayWaterEffect.bind(this)}>
+                  <span>喷水</span>
+                  <StarOutlined />
+                </Button>
+              </Form.Item>
+              <Form.Item label="天气">
+                <Button type="dash" size="small" onClick={this.changeWeather.bind(this, 1)}>
+                  <span>暴雪</span>
+                  <HeatMapOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.changeWeather.bind(this, 2)}>
+                  <span>迷雾</span>
+                  <HeatMapOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.changeWeather.bind(this, 3)}>
+                  <span>雨季</span>
+                  <HeatMapOutlined />
                 </Button>
               </Form.Item>
             </Form>

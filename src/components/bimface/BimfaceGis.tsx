@@ -10,9 +10,13 @@ import { Button, Drawer, Form, message, Select, Space } from 'antd';
 const { Option } = Select;
 import {
   AimOutlined,
+  BankOutlined,
   CarOutlined,
+  DingtalkOutlined,
+  ExpandOutlined,
   EyeOutlined,
   FunnelPlotOutlined,
+  HeatMapOutlined,
   HomeOutlined,
   LoginOutlined,
   MenuUnfoldOutlined
@@ -49,6 +53,7 @@ export default class BimfaceGis extends React.Component<any>{
       isLimitHeight: "",                                      // 是否开启控高分析
       heightLimitAnalysis: "",                                // 控高分析
       exMemberMng: "",                                        // 构件管理器
+      anchorMng: "",                                          // 锚点管理器
       ODAnimate: "",                                          // OD通勤图动画
       flyAnimate: "",                                         // 飞线图动画
       wallAnimate: "",                                        // 围墙动画
@@ -56,9 +61,17 @@ export default class BimfaceGis extends React.Component<any>{
       spline: "",                                             // 埋点曲线
       app: "",
       map: "",
+      heatMap: "",                                             // 热力图
+      area: [                                                 // 区域
+        { x: -106027.58975098796, y: -74866.585250797, z: 2.2153631096255566e-8 },
+        { x: 104227.73541303522, y: -94387.67416364288, z: 2.487612060786404e-8 },
+        { x: 155101.31722726062, y: 96202.12329448992, z: -1.7625050863223635e-9 },
+        { x: -57487.45109560891, y: 100678.36233218246, z: -2.444986990646214e-9 },
+        { x: -106027.58975098796, y: -74866.585250797, z: 2.2153631096255566e-8 }
+      ],
       viewer: "",
       viewToken: "03fd580340034846aa645767a4111f15",
-      // viewToken: "1c0c8371ca1d4a7f9df986743074974b",
+      // viewToken: "806ff12b1dfc43449c42f26bde06eee2",
       constructList: [],
     }
   }
@@ -77,34 +90,51 @@ export default class BimfaceGis extends React.Component<any>{
       // 设置WebApplication3D的配置项
       let webAppConfig = new Glodon.Bimface.Application.WebApplication3DConfig();
       webAppConfig.domElement = document.getElementById('domId');
+      webAppConfig.enableExplosion = true;
       // 创建WebApplication3D，用以显示模型
       let app = new Glodon.Bimface.Application.WebApplication3D(webAppConfig);
       app.addView(viewToken)
       let viewer = app.getViewer();
       // 构件控制器
       let exMemberMng = new Glodon.Bimface.Viewer.ExternalObjectManager(viewer)
-      this.setState({ app, viewer, exMemberMng }, () => {
+      // 锚点控制器
+      let anchorMngConfig = new Glodon.Bimface.Plugins.Anchor.AnchorManagerConfig();
+      anchorMngConfig.viewer = viewer;
+      let anchorMng = new Glodon.Bimface.Plugins.Anchor.AnchorManager(anchorMngConfig)
+      // state
+      this.setState({ app, viewer, exMemberMng, anchorMng }, () => {
         this.setEvent();
       })
     }, e => console.log("failure_load:", e))
   }
 
   setEvent() {
-    const { viewer } = this.state;
+    const { viewer, exMemberMng, anchorMng } = this.state;
     // 模型加载时配置地图
     viewer.addEventListener("ViewAdded", e => {
-      // 模型着色
-      this.setStyle();
-      // 设置服务
-      this.setMap();
+      this.setStyle(); // 模型着色
+      this.setMap(); // 设置服务
       viewer.render();
     })
     // 左键保存位置信息
     viewer.addEventListener("MouseClicked", (e) => {
       console.log(e.worldPosition, viewer.getCameraStatus())
-      if (e.objectId)
+      if (e.objectId) {
         this.setState({ targetPosition: e.worldPosition })
+        this.addAnchor(e.worldPosition)
+      }
     })
+  }
+
+  setCarmera() {
+    const { viewer } = this.state;
+    // 设置视角
+    viewer.setCameraStatus({
+      position: { x: -284915.4158724796, y: -837901.8893326016, z: 551610.5298125042 },
+      target: { x: -202184.34993240816, y: -522268.12582706026, z: 359909.83035632205 },
+      up: { x: 0.1284354342770904, y: 0.4899998153533125, z: 0.8622090930718458 }
+    })
+    viewer.render();
   }
 
   setMap() {
@@ -112,7 +142,9 @@ export default class BimfaceGis extends React.Component<any>{
     let mapConfig = new Glodon.Bimface.Plugins.TileMap.MapConfig();
     mapConfig.viewer = viewer;
     mapConfig.basePoint = { "x": -85689.088, "y": -62066.347 };           // 模型载入载入的基点  
+    // mapConfig.basePoint = { "x": 0, "y": 0 };           // 模型载入载入的基点  
     mapConfig.modelPosition = [121.63255566511255, 29.837958723638756]    // 模型载入基点所对应的经纬度（WGS84）    
+    // mapConfig.modelPosition = [121.628555, 29.832858]                     // 模型载入基点所对应的经纬度（WGS84）    
     mapConfig.modelRotationZ = 0 * Math.PI / 180;                         // 设置模型的旋转弧度值
     mapConfig.modelAltitude = 0.0;                                        // 设置模型零零标高对应的高程值，单位为米
     // 构造地图对象
@@ -126,7 +158,7 @@ export default class BimfaceGis extends React.Component<any>{
 
   setStyle() {
     const { viewer } = this.state;
-    return 
+    return
     viewer.setBackgroundColor(new Glodon.Web.Graphics.Color(248, 248, 248, 1))
     // 河流
     viewer.overrideComponentsColorById(["69", "70"], new Glodon.Web.Graphics.Color(182, 222, 239, 0));
@@ -161,7 +193,7 @@ export default class BimfaceGis extends React.Component<any>{
       config.direction = { x: -0.9, y: -0.10, z: 0.05 } //方向
       config.visibleAreaColor = new Glodon.Web.Graphics.Color(99, 188, 66, 0.8);  //可视范围颜色
       config.hiddenAreaColor = new Glodon.Web.Graphics.Color(244, 166, 148, 0.8); //不可视范围颜色
-      config.distance = 60000; // 可视范围
+      config.distance = 40000; // 可视范围
       config.horizontalFov = Math.PI / 4; // 可视角度
       config.verticalFov = Math.PI / 8;
       let viewshed = new Glodon.Bimface.Analysis.Viewshed.Viewshed3D(config);
@@ -196,7 +228,7 @@ export default class BimfaceGis extends React.Component<any>{
       config.color = new Glodon.Web.Graphics.Color(188, 66, 222, .6);
       config.height = 10000;
       config.mode = 'customized';
-      config.area = { 'type': 'circle', 'center': { x: 339219, y: 13310, z: 14101 }, 'radius': 200000 };
+      config.area = { 'type': 'circle', 'center': { x: 339219, y: 13310, z: 14101 }, 'radius': 100000 };
       config.viewer = viewer;
       // 构造控高分析对象
       let heightLimitAnalysis = new Glodon.Bimface.Analysis.HeightLimit.HeightLimitAnalysis(config);
@@ -214,9 +246,9 @@ export default class BimfaceGis extends React.Component<any>{
     } else {
       // 设置视角
       viewer.setCameraStatus({
-        position: { x: -107158.15343962245, y: -237356.44596605303, z: 199942.57446016822 },
-        target: { x: 522880.5803750656, y: 392684.61054889293, z: -430093.851441898 },
-        up: { x: 0, y: -0.000003673204932352431, z: 0.9999999999932537 },
+        position: { x: -166157.54781177538, y: -252039.9724713352, z: 221153.7341637216 },
+        target: { x: 463881.19633936725, y: 378001.0943885161, z: -408882.7020833503 },
+        up: { x: 0, y: -0.0000036731748132301412, z: 0.9999999999932537 }
       })
       // 构造扫描效果配置
       let config;
@@ -377,33 +409,123 @@ export default class BimfaceGis extends React.Component<any>{
     }
   }
 
-  wallAnimate(){
-    const { viewer, points, exMemberMng } = this.state;
-    if (!points.length) return message.warning("请先添加至少3个节点！")
-    exMemberMng.clear();
+  // 围墙效果
+  wallAnimate() {
+    const { viewer, area } = this.state;
     if (this.state.wallAnimate) {
-      this.state.wallAnimate.stop()
-      this.setState({ wallAnimate: "", points: [] })
+      this.state.wallAnimate.destroy()
+      this.setState({ wallAnimate: "" })
     } else {
+      // 设置视角
+      viewer.setCameraStatus({
+        position: { x: -166157.54781177538, y: -252039.9724713352, z: 221153.7341637216 },
+        target: { x: 463881.19633936725, y: 378001.0943885161, z: -408882.7020833503 },
+        up: { x: 0, y: -0.0000036731748132301412, z: 0.9999999999932537 }
+      })
       // 构造电子围墙效果配置项
       let config = new Glodon.Bimface.Plugins.Animation.WallEffectConfig();
-      points.push(points[0]);
-      // 配置Viewer对象、方向、持续时间、路径、高度
       config.viewer = viewer;
       config.direction = {
-        type: "Normal",  // 运动方式为沿着路径的切线方向
+        type: "Normal",  // 运动方式为沿着路径的切线方向 Tangent Normal
         reverse: false    // 运动方向默认为逆时针
       }
-      config.duration = 3000;
-      config.height = 80000;
-      config.path = points;
+      config.duration = 2000;
+      config.height = 30000;
+      config.path = area;
       config.color = new Glodon.Web.Graphics.Color(50, 211, 166, 0.6);
       // 围墙动画
       let wallAnimate = new Glodon.Bimface.Plugins.Animation.WallEffect(config);
-      console.log(wallAnimate)
-      this.setState({wallAnimate})
+      this.setState({ wallAnimate })
     }
   }
+
+  // 水平扫描
+  planeScan() {
+    const { viewer, area } = this.state;
+    if (this.state.planeScanAnimate) {
+      console.log(this.state.planeScanAnimate)
+      this.state.planeScanAnimate.destroy()
+      this.setState({ planeScanAnimate: "" })
+    } else {
+      // 设置视角
+      viewer.setCameraStatus({
+        position: { x: -166157.54781177538, y: -252039.9724713352, z: 221153.7341637216 },
+        target: { x: 463881.19633936725, y: 378001.0943885161, z: -408882.7020833503 },
+        up: { x: 0, y: -0.0000036731748132301412, z: 0.9999999999932537 }
+      })
+      // 构造平面扫描效果配置项
+      let config = new Glodon.Bimface.Plugins.Animation.PlaneScanEffectConfig()
+      config.viewer = viewer;
+      config.direction = { x: 0.6, y: 0.8, z: 0 };
+      config.duration = 2000;
+      config.boundary = area;
+      config.color = new Glodon.Web.Graphics.Color(50, 211, 166, 1.0);
+      config.material = this.getMaterial();
+      // 设置材质与颜色的混合参数
+      config.blendingRatio = 0.3;
+      let planeScanAnimate = new Glodon.Bimface.Plugins.Animation.PlaneScanEffect(config);
+      this.setState({ planeScanAnimate })
+    }
+  }
+
+  // 获取材质
+  getMaterial() {
+    let config = new Glodon.Bimface.Plugins.Material.MaterialConfig();
+    config.viewer = this.state.viewer;
+    config.src = "https://static.bimface.com/attach/3e8cedfed7a04c8e9cb115ce192e209f_big.png";
+    return new Glodon.Bimface.Plugins.Material.Material(config)
+  }
+
+  // 立体锚点
+  addAnchor(pos: Object) {
+    const { viewer, anchorMng } = this.state;
+    anchorMng.clear();
+    // 构造棱锥锚点的配置项
+    var config = new Glodon.Bimface.Plugins.Anchor.PrismPointConfig();
+    config.position = pos;
+    config.duration = 3500;
+    config.size = 15000;
+    // 构造棱锥锚点对象，并载入至三维锚点管理器中
+    let prismPoint = new Glodon.Bimface.Plugins.Anchor.PrismPoint(config);
+    console.log(anchorMng, "mng")
+    anchorMng.addItem(prismPoint);
+  }
+
+  // 热力图
+  heatMap() {
+    const { viewer, area } = this.state;
+    if (!this.state.heatMap) {
+      // 设置视角
+      viewer.setCameraStatus({
+        position: { x: -166157.54781177538, y: -252039.9724713352, z: 221153.7341637216 },
+        target: { x: 463881.19633936725, y: 378001.0943885161, z: -408882.7020833503 },
+        up: { x: 0, y: -0.0000036731748132301412, z: 0.9999999999932537 }
+      })
+      // 构造二维热力图配置项
+      let config = new Glodon.Bimface.Plugins.Heatmap.Heatmap2DConfig();
+      config.enableColorLegend = true;
+      config.viewer = viewer;
+      config.boundary = area;
+      // 构造二维热力图对象
+      let heatMap = new Glodon.Bimface.Plugins.Heatmap.Heatmap2D(config);
+      let heatData = [];
+      for (let i = 0; i < 30; i++) heatData.push({
+        x: -80000 + 220000 * Math.random(),
+        y: -60000 + 150000 * Math.random(),
+        value: 50 + 50 * Math.random()
+      })
+      heatMap.setData(heatData);
+      heatMap.setRadius(50);
+      heatMap.update();
+      heatMap.show();
+      this.setState({ heatMap })
+    } else {
+      this.state.heatMap.dispose();
+      this.setState({ heatMap: "" })
+    }
+  }
+
+
 
   // 切换地图类型
   changeMap(type) {
@@ -489,11 +611,21 @@ export default class BimfaceGis extends React.Component<any>{
                 </Button>
                 <Button type="dash" size="small" onClick={this.flyAnimate.bind(this)}>
                   <span>飞线图</span>
-                  <CarOutlined />
+                  <DingtalkOutlined />
                 </Button>
+              </Form.Item>
+              <Form.Item label="区域">
                 <Button type="dash" size="small" onClick={this.wallAnimate.bind(this)}>
                   <span>围墙</span>
-                  <CarOutlined />
+                  <BankOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.planeScan.bind(this)}>
+                  <span>水平扫描</span>
+                  <ExpandOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.heatMap.bind(this)}>
+                  <span>{this.state.heatMap ? "清除" : "开启"}热力图</span>
+                  <HeatMapOutlined />
                 </Button>
               </Form.Item>
             </Form>
