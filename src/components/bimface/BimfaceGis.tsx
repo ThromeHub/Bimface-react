@@ -6,7 +6,7 @@ import { connect } from '@store/connect';
 
 import moment from 'moment'
 //antd
-import { Button, Drawer, Form, message, Select, Space } from 'antd';
+import { Button, Drawer, Form, message, Select, Slider, Space } from 'antd';
 const { Option } = Select;
 import {
   AimOutlined,
@@ -59,6 +59,9 @@ export default class BimfaceGis extends React.Component<any>{
       wallAnimate: "",                                        // 围墙动画
       points: [],                                             // 埋点集合
       spline: "",                                             // 埋点曲线
+      brightness: 0,                                          // 地图亮度
+      contras: 0,                                             // 地图对比度
+      saturation: 0,                                          // 地图饱和度
       app: "",
       map: "",
       heatMap: "",                                             // 热力图
@@ -70,7 +73,7 @@ export default class BimfaceGis extends React.Component<any>{
         { x: -106027.58975098796, y: -74866.585250797, z: 2.2153631096255566e-8 }
       ],
       viewer: "",
-      viewToken: "03fd580340034846aa645767a4111f15",
+      viewToken: "c9dc63abb1174e8bb68246de463ae67b",
       // viewToken: "806ff12b1dfc43449c42f26bde06eee2",
       constructList: [],
     }
@@ -91,6 +94,11 @@ export default class BimfaceGis extends React.Component<any>{
       let webAppConfig = new Glodon.Bimface.Application.WebApplication3DConfig();
       webAppConfig.domElement = document.getElementById('domId');
       webAppConfig.enableExplosion = true;
+      webAppConfig.enableToggleContextMenuDisplay = true;   //是否启用右键菜单
+      webAppConfig.enableHover = true;                      //是否开启鼠标悬停效果
+      webAppConfig.enableBorderLine = true;                 //是否显示轮廓线
+      webAppConfig.exposure = 0.4;                          //设置曝光度
+      webAppConfig.enableIBLBackground = true;              //是否启用环境光照
       // 创建WebApplication3D，用以显示模型
       let app = new Glodon.Bimface.Application.WebApplication3D(webAppConfig);
       app.addView(viewToken)
@@ -101,21 +109,21 @@ export default class BimfaceGis extends React.Component<any>{
       let anchorMngConfig = new Glodon.Bimface.Plugins.Anchor.AnchorManagerConfig();
       anchorMngConfig.viewer = viewer;
       let anchorMng = new Glodon.Bimface.Plugins.Anchor.AnchorManager(anchorMngConfig)
-      // state
-      this.setState({ app, viewer, exMemberMng, anchorMng }, () => {
-        this.setEvent();
+      // 模型加载时配置地图
+      viewer.addEventListener("ViewAdded", e => {
+        this.setStyle();    // 模型着色
+        this.setSkyBox();   // 设置天空盒
+        this.setMap();      // 设置服务
+        // this.setEvent();
+        viewer.render();
       })
+      // state
+      this.setState({ app, viewer, exMemberMng, anchorMng })
     }, e => console.log("failure_load:", e))
   }
 
   setEvent() {
-    const { viewer, exMemberMng, anchorMng } = this.state;
-    // 模型加载时配置地图
-    viewer.addEventListener("ViewAdded", e => {
-      this.setStyle(); // 模型着色
-      this.setMap(); // 设置服务
-      viewer.render();
-    })
+    const { viewer } = this.state;
     // 左键保存位置信息
     viewer.addEventListener("MouseClicked", (e) => {
       console.log(e.worldPosition, viewer.getCameraStatus())
@@ -124,6 +132,30 @@ export default class BimfaceGis extends React.Component<any>{
         this.addAnchor(e.worldPosition)
       }
     })
+  }
+
+  // 设置天空盒
+  setSkyBox() {
+    const { viewer } = this.state;
+    if (this.state.skyBoxMng) return
+    // 构造天空盒管理器配置项，并指定Viewer、Option参数
+    let config = new Glodon.Bimface.Plugins.SkyBox.SkyBoxManagerConfig();
+    config.viewer = viewer;
+    // 设置自定义天空盒的图片资源
+    config.customizedImage = {
+      front: "https://static.bimface.com/attach/0d178c31584d432f93b3df90832d6ba1_EnvMap_posz.jpg",
+      back: "https://static.bimface.com/attach/c02b7114af6d4966b3f1fd7d483fcdd9_EnvMap_negz.jpg",
+      left: "https://static.bimface.com/attach/6c2f5045467b4c51a4e506524e74a65c_EnvMap_negx.jpg",
+      right: "https://static.bimface.com/attach/ec541f626f194a979d49ec5f52ca32bb_EnvMap_posx.jpg",
+      top: "https://static.bimface.com/attach/01700a9a6f7542af8df76bc923b065b9_EnvMap_posy.jpg",
+      bottom: "https://static.bimface.com/attach/031a2a1a51374fc88fe8acf1d490b7c0_EnvMap_negy.jpg"
+    }
+    config.style = Glodon.Bimface.Plugins.SkyBox.SkyBoxStyle.CloudySky;
+    // 构造天空盒管理器，构造完成后，场景背景即发生变化
+    let skyBoxMng = new Glodon.Bimface.Plugins.SkyBox.SkyBoxManager(config);
+    skyBoxMng.setStyle(Glodon.Bimface.Plugins.SkyBox.SkyBoxStyle.CloudySky);
+    skyBoxMng.enableSkyBox(true);
+    this.setState({ skyBoxMng })
   }
 
   setCarmera() {
@@ -158,6 +190,16 @@ export default class BimfaceGis extends React.Component<any>{
 
   setStyle() {
     const { viewer } = this.state;
+    viewer.enableGlowEffect(true);  //开启物体发光效果
+    // body整体金光
+    viewer.getModel().setGlowEffectById(
+      [
+        "1763888097691488.235825581", "1763888097691488.235825336", "1763888097691488.235825568",
+        "1763888097691488.235825885", "1763888097691488.235825869", "1763888097691488.235825838",
+        "1763888097691488.235825953", "1763888097691488.235825898", "1763888097691488.235825249"
+      ],
+      { type: "body", color: new Glodon.Web.Graphics.Color(255, 229, 89, 1), intensity: 0.3, spread: 3 })
+    viewer.render();
     return
     viewer.setBackgroundColor(new Glodon.Web.Graphics.Color(248, 248, 248, 1))
     // 河流
@@ -207,35 +249,36 @@ export default class BimfaceGis extends React.Component<any>{
     this.setState(prev => { return { isViewshed: !prev.isViewshed } })
   }
 
-  // 设置限高样式
-  LimitHeight() {
-    const { viewer, isLimitHeight, heightLimitAnalysis } = this.state;
-    if (heightLimitAnalysis) {
-      isLimitHeight
-        ? heightLimitAnalysis.hide()
-        : heightLimitAnalysis.show()
-      heightLimitAnalysis.update()
+  // 通视分析
+  sightLine() {
+    const { viewer } = this.state;
+    if (this.state.sightLine) {
+      this.state.sightLine.destroy();
+      this.setState({ sightLine: "" })
     } else {
       // 设置视角
       viewer.setCameraStatus({
-        position: { x: 125039.18370122703, y: -242387.30667969838, z: 241470.13837781825 },
-        target: { x: 705596.9763040222, y: 382217.443164706, z: -439461.5710362263 },
-        up: { x: 0.4248181220968849, y: 0.45704439987104817, z: 0.7814345651969777 },
-      });
-      // 构造控高分析配置项
-      var config = new Glodon.Bimface.Analysis.HeightLimit.HeightLimitAnalysisConfig();
-      // 设置控高分析颜色、控制高度、控高分析模式、控高分析的平面区域、viewer对象等参数
-      config.color = new Glodon.Web.Graphics.Color(188, 66, 222, .6);
-      config.height = 10000;
-      config.mode = 'customized';
-      config.area = { 'type': 'circle', 'center': { x: 339219, y: 13310, z: 14101 }, 'radius': 100000 };
+        position: { x: 399197.6927405494, y: -63629.62437383297, z: 36676.82078441595 },
+        target: { x: -201292.48796051997, y: 685313.1133083657, z: -482305.4934696139 },
+        up: { x: -0.2974986819638406, y: 0.37104182057356094, z: 0.8796718147213964 }
+      })
+      // 构造通视分析配置项
+      let config = new Glodon.Bimface.Analysis.Sightline.SightlineAnalysisConfig();
+      //  设置通视分析的观测点、目标点、可见部分的视线颜色、不可见部分的视线颜色、viewer对象等参数
+      config.viewPoint = { x: 378009.9204790529, y: -8583.420964820874, z: 7546.564179268196 };
+      config.targetPoints = [
+        { x: 329264.12172500207, y: -12614.288043874581, z: 7999.534979238504 },
+        { x: 294866.8513644143, y: -5049.158388927783, z: 17892.909967303593 }
+      ];
+      config.visibleColor = new Glodon.Web.Graphics.Color(50, 211, 166, 1);
+      config.invisibleColor = new Glodon.Web.Graphics.Color(235, 0, 29, 1);
       config.viewer = viewer;
-      // 构造控高分析对象
-      let heightLimitAnalysis = new Glodon.Bimface.Analysis.HeightLimit.HeightLimitAnalysis(config);
-      this.setState({ heightLimitAnalysis })
+      // 构造通视分析对象
+      let sightLine = new Glodon.Bimface.Analysis.Sightline.SightlineAnalysis(config);
+      viewer.render();
+      this.setState({ sightLine })
     }
-    viewer.render();
-    this.setState(prev => { return { isLimitHeight: !prev.isLimitHeight } })
+    this.setState(prev => { return { isSightLine: !prev.isSightLine } })
   }
 
   // 扫描效果
@@ -468,6 +511,37 @@ export default class BimfaceGis extends React.Component<any>{
     }
   }
 
+  // 设置限高样式
+  limitHeight() {
+    const { viewer, isLimitHeight, heightLimitAnalysis } = this.state;
+    if (heightLimitAnalysis) {
+      isLimitHeight
+        ? heightLimitAnalysis.hide()
+        : heightLimitAnalysis.show()
+      heightLimitAnalysis.update()
+    } else {
+      // 设置视角
+      viewer.setCameraStatus({
+        position: { x: 125039.18370122703, y: -242387.30667969838, z: 241470.13837781825 },
+        target: { x: 705596.9763040222, y: 382217.443164706, z: -439461.5710362263 },
+        up: { x: 0.4248181220968849, y: 0.45704439987104817, z: 0.7814345651969777 },
+      });
+      // 构造控高分析配置项
+      var config = new Glodon.Bimface.Analysis.HeightLimit.HeightLimitAnalysisConfig();
+      // 设置控高分析颜色、控制高度、控高分析模式、控高分析的平面区域、viewer对象等参数
+      config.color = new Glodon.Web.Graphics.Color(188, 66, 222, .6);
+      config.height = 10000;
+      config.mode = 'customized';
+      config.area = { 'type': 'circle', 'center': { x: 339219, y: 13310, z: 14101 }, 'radius': 100000 };
+      config.viewer = viewer;
+      // 构造控高分析对象
+      let heightLimitAnalysis = new Glodon.Bimface.Analysis.HeightLimit.HeightLimitAnalysis(config);
+      this.setState({ heightLimitAnalysis })
+    }
+    viewer.render();
+    this.setState(prev => { return { isLimitHeight: !prev.isLimitHeight } })
+  }
+
   // 获取材质
   getMaterial() {
     let config = new Glodon.Bimface.Plugins.Material.MaterialConfig();
@@ -484,7 +558,7 @@ export default class BimfaceGis extends React.Component<any>{
     var config = new Glodon.Bimface.Plugins.Anchor.PrismPointConfig();
     config.position = pos;
     config.duration = 3500;
-    config.size = 15000;
+    config.size = 10000;
     // 构造棱锥锚点对象，并载入至三维锚点管理器中
     let prismPoint = new Glodon.Bimface.Plugins.Anchor.PrismPoint(config);
     console.log(anchorMng, "mng")
@@ -531,14 +605,35 @@ export default class BimfaceGis extends React.Component<any>{
   changeMap(type) {
     const { map } = this.state;
     switch (type) {
-      case "amp":
+      case "amp":       // 高德影像
         return map.setMapSource({ url: `https://webst01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=6&x={x}&y={y}&z={z}` })
-      case "amapload":
+      case "amapload":  // 高德道路
         return map.setMapSource({ url: `https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}` })
       case "osmload":
         return map.setMapSource({ url: `https://c.tile.openstreetmap.org/{z}/{x}/{y}.png` })
       case "arcgis":
         return map.setMapSource({ url: `https://map.geoq.cn/ArcGIS/rest/services/ChinaOnlineCommunity/MapServer/tile/{z}/{y}/{x}` })
+    }
+  }
+
+  // 切换显示参数
+  changeMapFactor(type, value) {
+    console.log(type, value)
+    const { viewer, map, brightness, contras, saturation } = this.state;
+    const v = parseFloat(value / 10)
+    switch (type) {
+      case 1: // 亮度
+        map.setMapStyle({ brightness: v, contras, saturation })
+        this.setState({ brightness: v })
+        break;
+      case 2: // 对比度
+        map.setMapStyle({ brightness, contras: v, saturation })
+        this.setState({ contras: v })
+        break;
+      case 3: // 饱和度
+        map.setMapStyle({ brightness, contras, saturation: v })
+        this.setState({ saturation: v })
+        break;
     }
   }
 
@@ -580,14 +675,14 @@ export default class BimfaceGis extends React.Component<any>{
             onClose={_ => this.setState({ drawerShow: false })}
           >
             <Form>
-              <Form.Item label="筛选">
+              <Form.Item label="视野">
                 <Button type={this.state.isViewshed ? "primary" : "dash"} size="small" onClick={this.toggleViewShed.bind(this)}>
                   <span>可视域</span>
                   <EyeOutlined />
                 </Button>
-                <Button type={this.state.isLimitHeight ? "primary" : "dash"} size="small" onClick={this.LimitHeight.bind(this)}>
-                  <span>控高</span>
-                  <HomeOutlined />
+                <Button type="dash" size="small" onClick={this.sightLine.bind(this)}>
+                  <span>通视</span>
+                  <EyeOutlined />
                 </Button>
               </Form.Item>
               <Form.Item label="扫描">
@@ -623,10 +718,32 @@ export default class BimfaceGis extends React.Component<any>{
                   <span>水平扫描</span>
                   <ExpandOutlined />
                 </Button>
+                <Button type={this.state.isLimitHeight ? "primary" : "dash"} size="small" onClick={this.limitHeight.bind(this)}>
+                  <span>控高</span>
+                  <HomeOutlined />
+                </Button>
                 <Button type="dash" size="small" onClick={this.heatMap.bind(this)}>
                   <span>{this.state.heatMap ? "清除" : "开启"}热力图</span>
                   <HeatMapOutlined />
                 </Button>
+              </Form.Item>
+              <Form.Item label="明亮度">
+                <Slider defaultValue={0}
+                  max={10}
+                  min={-10}
+                  onChange={this.changeMapFactor.bind(this, 1)} />
+              </Form.Item>
+              <Form.Item label="对比度">
+                <Slider defaultValue={0}
+                  max={10}
+                  min={-10}
+                  onChange={this.changeMapFactor.bind(this, 2)} />
+              </Form.Item>
+              <Form.Item label="饱和度">
+                <Slider defaultValue={0}
+                  max={10}
+                  min={-10}
+                  onChange={this.changeMapFactor.bind(this, 3)} />
               </Form.Item>
             </Form>
           </Drawer>

@@ -6,9 +6,10 @@ import { connect } from '@store/connect';
 import * as utils from "@src/utils";
 
 //antd
-import { Button, DatePicker, Drawer, Form, message, Space } from 'antd';
+import { Button, DatePicker, Drawer, Form, message, Space, Switch } from 'antd';
 import {
   AimOutlined,
+  AlertOutlined,
   BankOutlined,
   BgColorsOutlined,
   BorderBottomOutlined,
@@ -17,12 +18,15 @@ import {
   CodepenCircleOutlined,
   EditOutlined,
   EnvironmentOutlined,
+  FireOutlined,
   FormOutlined,
   HeatMapOutlined,
   HighlightOutlined,
+  HistoryOutlined,
   LockOutlined,
   LogoutOutlined,
   MenuUnfoldOutlined,
+  NotificationOutlined,
   PlayCircleOutlined,
   PlusOutlined,
   RedoOutlined,
@@ -33,6 +37,7 @@ import {
   UndoOutlined,
   VideoCameraAddOutlined,
   VideoCameraOutlined,
+  YoutubeOutlined
 } from '@ant-design/icons';
 
 
@@ -90,9 +95,12 @@ export default class BimfaceMap extends React.Component<any> {
       pointsContainer: "",                                // 漫游定点标签容器
       pathAnimation: "",                                  // 漫游动画
       pausePathAnimation: false,                          // 漫游动画是否暂停
+      lightMng: "",
+      lightId: "",
+      isLight: false,
       app: "",                                            // 主组件
       viewer: "",                                         // 视图组件
-      viewToken: "9b1f110f213843e6bd576c2e1ed52dc7",      // 模型token 12小时
+      viewToken: "08d8c25ab1bf4a8292567b756cede25b",      // 模型token 12小时
       // viewToken: "f98247cff86e4cf686b796d2ec1fe952",   // 图纸token 12小时
       construct: ["地坪", "F1", "F2", "F3", "ROOF"],      // 解构列表
       statusList: "",                                     // 状态列表
@@ -124,6 +132,7 @@ export default class BimfaceMap extends React.Component<any> {
       isModal ? app.addView(viewToken) : app.load(viewToken);
       //获取viewer3D对象
       let viewer = app.getViewer();
+      viewer.enableGlowEffect(true);  //开启物体发光效果
       //设置视角
       this.setState({ app, viewer }, () => {
         this.setEvent();
@@ -153,7 +162,7 @@ export default class BimfaceMap extends React.Component<any> {
     let { viewer } = this.state;
     // 左键保存位置信息
     viewer.addEventListener("MouseClicked", (e) => {
-      console.log(e)
+      console.log(e, viewer.getCameraStatus())
       if (e.objectId)
         this.setState({ targetPosition: e.worldPosition })
     })
@@ -374,6 +383,25 @@ export default class BimfaceMap extends React.Component<any> {
     viewer.setBlinkIntervalTime(500)
     viewer.render();
     this.setState({ isBlink: true })
+  }
+
+  // 发光
+  glow() {
+    const { viewer, isGlow } = this.state;
+    if (isGlow)
+      viewer.getModel().removeGlowEffectById(["323451", "323468", "323348", "323367", "323403", "323154", "323217", "323386", "323432"])
+    else {
+      // body整体金光
+      viewer.getModel().setGlowEffectById(
+        ["323451", "323468", "323348", "323367", "323403"], //body整体发光 outline轮廓线发光
+        { type: "body", color: new Glodon.Web.Graphics.Color(255, 229, 89, 1), intensity: 0.3, spread: 3 })
+      // outline轮廓线青光
+      viewer.getModel().setGlowEffectById(
+        ["323154", "323217", "323386", "323432"], //body整体发光 
+        { type: "body", color: new Glodon.Web.Graphics.Color(50, 211, 166, 1), intensity: 0.2, spread: 3 })
+      // viewer.overrideComponentsColorById(["323451","323468","323348","323367","323403","323154","323217","323386"], new Glodon.Web.Graphics.Color(255, 255, 255, 0.55));
+    }
+    this.setState(prev => { return { isGlow: !prev.isGlow } })
   }
 
   // 存写状态
@@ -818,14 +846,37 @@ export default class BimfaceMap extends React.Component<any> {
         y: -2099.187249302578,
         z: 12673.691311838113
       };
-      config.originRadius = 60;
-      config.originIntensity = 0.3;
-      config.spread = 1.5;
-      config.scale = 3
+      config.originRadius = 80;
+      config.originIntensity = 0.4;
+      config.spread = 3;
+      config.scale = 5
       // 构造喷水效果对象
       let sprayWaterEffect = new Glodon.Bimface.Plugins.ParticleSystem.SprayWaterEffect(config);
       sprayWaterEffect.update();
       this.setState({ sprayWaterEffect, isSprayWater: true })
+    }
+  }
+  //水面效果
+  waterEffect() {
+    const { viewer } = this.state;
+    if (this.state.water) {
+      this.state.water.remove();
+      this.setState({ water: "" });
+    } else {
+      let config = new Glodon.Bimface.Plugins.Animation.WaterEffectConfig();
+      config.boundary = [
+        { x: -19655.84116294953, y: -16330.97931685941, z: -400 },
+        { x: -19672.862563719456, y: 14017.167476008586, z: -400 },
+        { x: 18777.673690162723, y: -17290.457994191973, z: -400 },
+      ];
+      config.viewer = viewer;
+      // 构造水面效果类，并设置效果
+      let water = new Glodon.Bimface.Plugins.Animation.WaterEffect(config);
+      water.setColor(new Glodon.Web.Graphics.Color('#23A9F2', 0.4));
+      water.setScale(2);
+      water.setXDirection(2);
+      water.setYDirection(2);
+      this.setState({ water })
     }
   }
 
@@ -852,9 +903,9 @@ export default class BimfaceMap extends React.Component<any> {
         config = new Glodon.Bimface.Plugins.WeatherEffect.FogConfig();
         config.viewer = viewer;
         config.darkness = 0.5;          // 天空的灰暗程度，取值为0-1，默认值为0.5
-        config.lightAttenuation = 3.0;  // 光线衰减的指数，取值大于零，值越小则场景雾化速度越慢,默认值为3.5
+        config.lightAttenuation = 5.0;  // 光线衰减的指数，取值大于零，值越小则场景雾化速度越慢,默认值为3.5
         config.fogColor = new Glodon.Web.Graphics.Color(255, 255, 255, 0.5);  // 雾的颜色，默认值为白色
-        config.visualDistance = 400000; // 最远可视范围，默认500,000，单位为mm
+        config.visualDistance = 200000; // 最远可视范围，默认500,000，单位为mm
         weather = new Glodon.Bimface.Plugins.WeatherEffect.Fog(config);
         weather.enableEffect(true)
         break;
@@ -869,6 +920,142 @@ export default class BimfaceMap extends React.Component<any> {
     }
     viewer.render();
     this.setState({ weather, weatherType: type })
+  }
+
+  /*
+  * 聚光
+  */
+  createLight() {
+    const { viewer } = this.state;
+    let lightMng = viewer.getLightManager();
+    // 构造聚光灯配置项
+    var config = new Glodon.Bimface.Light.SpotLightConfig();
+    config.viewer = viewer;
+    // config.position = { 'x': 27.038391046237017, 'y': -1614.4351043688982, 'z': 9753.098173741395 };
+    config.position = {
+      x: 159.18043272176007,
+      y: -7622.7142273894615,
+      z: 20459.985818160916
+    }
+    config.target = { 'x': 27.038391046237017, 'y': -1614.4351043688982, 'z': 0 };
+    config.intensity = 3;
+    config.distance = 10000;
+    config.penumbra = 0.1;
+    config.color = new Glodon.Web.Graphics.Color(255, 215, 0, 1);
+    config.angle = Math.PI / 6;
+    config.shadow = true;
+    // 构造聚光灯对象
+    let spotLight = new Glodon.Bimface.Light.SpotLight(config);
+    lightMng.addLight(spotLight);
+    // 聚光灯Id
+    let lightId = spotLight.uuid;
+    this.setState({ lightMng, lightId, isLight: true })
+  }
+  //切换局部灯光
+  async toggleLight() {
+    if (!this.state.lightMng) await this.createLight()
+    const { lightMng, isLight, lightId } = this.state;
+    lightMng.enableLightsById([lightId], isLight);
+    lightMng.update();
+    this.setState(prev => { return { isLight: !prev.isLight } })
+  }
+  //切换全局灯光
+  async toggleAllLight() {
+    if (!this.state.lightMng) await this.createLight()
+    const { lightMng, isLight } = this.state;
+    lightMng.enableAllLights(isLight);
+    lightMng.update();
+    this.setState(prev => { return { isLight: !prev.isLight } })
+  }
+  //切换光照
+  async toggleSun() {
+    // 初始化光照管理器
+    if (!this.state.lightMng) {
+      await this.createLight();
+      this.state.lightMng.enableAllLights(false);
+      this.state.lightMng.update();
+    }
+    const { viewer, lightMng } = this.state;
+    // 获取默认用于控制投影的方向光
+    if (!this.state.lightDirect) {
+      let lightDirect = lightMng.getAllDirectionalLights()[0];
+      lightDirect.setDirectionByCondition({ lat: 31, lon: 120 }, new Date())
+      lightDirect.enableShadow(true)
+      viewer.render()
+      await this.setState({ lightDirect })
+    }
+    const { lightDirect } = this.state;
+    // 日照定时动画
+    if (this.state.sunTimer) {
+      clearInterval(this.state.sunTimer);
+      this.setState({ sunTimer: "" })
+    } else {
+      let stamp
+      let time = new Date();
+      let sunTimer = setInterval(() => {
+        lightDirect.setDirectionByCondition({ lat: 31, lon: 120 }, time)
+        viewer.render();
+        stamp = time.getTime();
+        stamp += 360000
+        time.setTime(stamp)
+      }, 100)
+      this.setState({ sunTimer })
+    }
+  }
+
+
+  /*
+  * 视频相关
+  */
+  video() {
+    const { viewer, isVideoPlay } = this.state;
+    if (this.state.video) {
+      isVideoPlay ? this.state.video.pause() : this.state.video.play();
+      this.setState(prev => { return { isVideoPlay: !prev.isVideoPlay } })
+    } else {
+      //设置相机
+      viewer.setCameraStatus({
+        position: { x: 2791.80771179951, y: -55629.91198374045, z: 17235.214726792026 },
+        target: { x: 4226.291398719512, y: 8552.242807642524, z: 13935.682092163934 },
+        up: { x: 0.0011469931574990648, y: 0.05131547813473715, z: 0.9986818342748105 },
+      })
+      //构造视频管理器
+      let config = new Glodon.Bimface.Plugins.Videos.VideoManagerConfig()
+      config.viewer = viewer;
+      let videoMng = new Glodon.Bimface.Plugins.Videos.VideoManager(config);
+      //构造视频配置项
+      let videoConfig = new Glodon.Bimface.Plugins.Videos.VideoConfig();
+      videoConfig.viewer = viewer;
+      videoConfig.src = "https://static.bimface.com/attach/2c44c7fcdd7a48ba933205cec80e97e3_BIMFACE产品介绍.mp4";
+      videoConfig.plane = { "distance": 20000, "side": 0 };
+      videoConfig.camera = {
+        "position": { x: 0, y: -10000, z: 26000 },      //投影点
+        "direction": new THREE.Vector3(0, 1, 0),        //投影角度
+        "horizontalFov": Math.PI * 0.4,                 //水平投影角度
+        "verticalFov": Math.PI * 0.3                    //竖直投影角度
+      };
+      videoConfig.mute = false; //是否静音
+      videoConfig.loop = false; //是否循环
+      videoConfig.callback = () => { video.play() }
+      //构造视频对象
+      let video = new Glodon.Bimface.Plugins.Videos.Video(videoConfig);
+      videoMng.addVideo(video);
+      this.setState({ videoMng, video, isVideoPlay: true })
+    }
+  }
+  // 切换视频静音
+  muteVideo() {
+    const { isVideoMute } = this.state;
+    if (!this.state.video) return message.warning("请先添加视频!")
+    this.state.video.mute(!isVideoMute);
+    this.setState(prev => { return { isVideoMute: !prev.isVideoMute } })
+  }
+  // 切换视频循环
+  loopVideo() {
+    const { isVideoLoop } = this.state;
+    if (!this.state.video) return message.warning("请先添加视频!")
+    this.state.video.loop(!isVideoLoop);
+    this.setState(prev => { return { isVideoLoop: !prev.isVideoLoop } })
   }
 
   // 隐藏默认UI
@@ -970,6 +1157,10 @@ export default class BimfaceMap extends React.Component<any> {
               <Form.Item label="闪烁">
                 <Button type={this.state.isBlink ? "primary" : "dash"} size="small" onClick={this.blink.bind(this)}>
                   <span>F1窗体</span>
+                  <BulbOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.glow.bind(this)}>
+                  <span>发光</span>
                   <BulbOutlined />
                 </Button>
               </Form.Item>
@@ -1106,26 +1297,68 @@ export default class BimfaceMap extends React.Component<any> {
               <Form.Item label="效果">
                 <Button type="dash" size="small" onClick={this.fireEffect.bind(this)}>
                   <span>火焰</span>
-                  <StarOutlined />
+                  <FireOutlined />
                 </Button>
                 <Button type="dash" size="small" onClick={this.sprayWaterEffect.bind(this)}>
                   <span>喷水</span>
-                  <StarOutlined />
+                  <FireOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.waterEffect.bind(this)}>
+                  <span>水面</span>
+                  <FireOutlined />
                 </Button>
               </Form.Item>
               <Form.Item label="天气">
                 <Button type="dash" size="small" onClick={this.changeWeather.bind(this, 1)}>
                   <span>暴雪</span>
-                  <HeatMapOutlined />
+                  <StarOutlined />
                 </Button>
                 <Button type="dash" size="small" onClick={this.changeWeather.bind(this, 2)}>
                   <span>迷雾</span>
-                  <HeatMapOutlined />
+                  <StarOutlined />
                 </Button>
                 <Button type="dash" size="small" onClick={this.changeWeather.bind(this, 3)}>
                   <span>雨季</span>
-                  <HeatMapOutlined />
+                  <StarOutlined />
                 </Button>
+              </Form.Item>
+              <Form.Item label="聚光">
+                <Button type="dash" size="small" onClick={this.toggleLight.bind(this)}>
+                  <span>局部</span>
+                  <AlertOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.toggleAllLight.bind(this)}>
+                  <span>全局</span>
+                  <AlertOutlined />
+                </Button>
+                <Button type="dash" size="small" onClick={this.toggleSun.bind(this)}>
+                  <span>光照</span>
+                  <AlertOutlined />
+                </Button>
+              </Form.Item>
+              <Form.Item label="媒体">
+                <Button type="dash" size="small" onClick={this.video.bind(this)}>
+                  <span>{this.state.videoMng ? (this.state.isVideoPlay ? "暂停" : "播放") : "添加"}</span>
+                  <YoutubeOutlined />
+                </Button>
+                <Space>
+                  <div>
+                    <span>静音</span>
+                    <Switch size="small" onChange={this.muteVideo.bind(this)} />
+                  </div>
+                  <div>
+                    <span>循环</span>
+                    <Switch size="small" onChange={this.loopVideo.bind(this)} />
+                  </div>
+                </Space>
+                {/* <Button type="dash" size="small" onClick={this.muteVideo.bind(this)}>
+                  <span>静音</span>
+                  <NotificationOutlined />
+                </Button> */}
+                {/* <Button type="dash" size="small" onClick={this.loopVideo.bind(this)}>
+                  <span>循环</span>
+                  <HistoryOutlined />
+                </Button> */}
               </Form.Item>
             </Form>
           </Drawer>
